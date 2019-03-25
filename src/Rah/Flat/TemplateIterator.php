@@ -96,15 +96,41 @@ class Rah_Flat_TemplateIterator extends DirectoryIterator
 
     /**
      * Get YAML file content as an object
+     * Cache the parsed YAML content to prevent from
+     * having to reparse if the content hasn't changed.
      */
 
     public function getTemplateYAMLContents()
     {
+        $tempDir = get_pref('tempdir');
+        $file = md5(__METHOD__ . $this->getTemplateContents()) . '.php';
+        $filePath = $tempDir . DIRECTORY_SEPARATOR . $file;
+        if (file_exists($filePath)) {
+            include $filePath;
+            $handle = fopen($filePath, 'w');
+            fwrite($handle, '<?php'.PHP_EOL.
+                'declare(strict_types=1);'.PHP_EOL.
+                '$created='.$created.';'.PHP_EOL.
+                '$updated='.time().';'.PHP_EOL.
+                '$called='.++$called.';'.PHP_EOL.
+                '$value=\''. $value .'\';'
+            );
+            fclose($handle);
+            return unserialize($value);
+        }
         $parser = new \Symfony\Component\Yaml\Parser();
         try {
-            return $parser->parse($this->getTemplateContents());
+            $parsed = $parser->parse($this->getTemplateContents());
+            $handle = fopen($filePath, 'w');
+            fwrite($handle, '<?php'.PHP_EOL.
+                'declare(strict_types=1);'.PHP_EOL.
+                '$created='.time().';'.PHP_EOL.
+                '$called=1;'.PHP_EOL.
+                '$value=\''. serialize($parsed) .'\';'
+            );
+            fclose($handle);
+            return $parsed;
         } catch (\Symfony\Component\Yaml\Exception\ParseException $ex) {
-
             throw new Exception('Invalid YAML file.');
         }
     }
